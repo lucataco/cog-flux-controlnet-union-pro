@@ -17,7 +17,7 @@ CONTROLNET_MODEL_UNION = 'Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro'
 MODEL_URL = "https://weights.replicate.delivery/default/black-forest-labs/FLUX.1-dev/files.tar"
 CONTROLNET_URL = "https://weights.replicate.delivery/default/shakker-labs/FLUX.1-dev-ControlNet-Union-Pro/model.tar"
 
-CONTROL_TYPES = ["canny", "tile", "depth", "blur", "pose", "gray", "low-quality"]
+CONTROL_TYPES = ["canny", "tile", "depth", "blur", "pose", "gray", "low-quality", "none"]
 
 def download_weights(url, dest):
     start = time.time()
@@ -53,6 +53,9 @@ class Predictor(BasePredictor):
         control_type: str = Input(description="Control type", default="canny", choices=CONTROL_TYPES),
         control_strength: float = Input(description="ControlNet strength, depth works best at 0.2, canny works best at 0.4. Recommended range is 0.3-0.8", default=0.2, ge=0, le=1),
         control_image: Path = Input(description="Control image", default=""),
+        control_type_2: str = Input(description="Control type", default="none", choices=CONTROL_TYPES),
+        control_strength_2: float = Input(description="ControlNet strength, depth works best at 0.2, canny works best at 0.4. Recommended range is 0.3-0.8", default=0.2, ge=0, le=1),
+        control_image_2: Path = Input(description="Control image", default=""),
         seed: int = Input(description="Set a seed for reproducibility. Random by default.", default=None)
     ) -> Path:
         """Run a single prediction on the model"""
@@ -63,19 +66,31 @@ class Predictor(BasePredictor):
 
         # set control mode to one of 7 supported control types
         control_mode = CONTROL_TYPES.index(control_type)
+        control_mode_2 = CONTROL_TYPES.index(control_type_2)
         control_image = Image.open(control_image)
+        control_image_2 = Image.open(control_image_2)
         width, height = control_image.size
         #resize image to be divisible by 8
         control_image = control_image.resize((width // 8 * 8, height // 8 * 8))
+        control_image_2 = control_image_2.resize((width // 8 * 8, height // 8 * 8))
         width, height = control_image.size
+
+        control_images = [control_image]
+        control_modes = [control_mode]
+        control_strengths = [control_strength]
+
+        if control_image_2 != "none":
+            control_images.append(control_image_2)
+            control_modes.append(control_mode_2)
+            control_strengths.append(control_strength_2)
 
         image = self.pipe(
             prompt,
-            control_image=[control_image],
-            control_mode=[control_mode],
+            control_image=control_images,
+            control_mode=control_modes,
             width=width,
             height=height,
-            controlnet_conditioning_scale=[control_strength],
+            controlnet_conditioning_scale=control_strengths,
             num_inference_steps=steps, 
             guidance_scale=guidance_scale,
             generator=generator
